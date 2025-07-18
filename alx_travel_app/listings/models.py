@@ -1,7 +1,3 @@
-import uuid
-from django.db import models
-from django.contrib.auth.models import User
-
 class Listing(models.Model):
     property_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     host = models.ForeignKey(User, on_delete=models.CASCADE, related_name='hosted_properties')
@@ -28,3 +24,5 @@ class Booking(models.Model):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"Booking by {self.user.email} for {self.property.name}"
