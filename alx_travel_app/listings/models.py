@@ -1,3 +1,9 @@
+from django.db import models
+import uuid
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
 class Listing(models.Model):
     property_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     host = models.ForeignKey(User, on_delete=models.CASCADE, related_name='hosted_properties')
