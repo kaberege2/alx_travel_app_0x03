@@ -1,10 +1,12 @@
-from rest_framework import status, viewsets
+from rest_framework import filters, status, viewsets
 from rest_framework.response import Response
 from .permissions import IsAuthenticatedIsOwnerOrReadOnlyListing, IsAuthenticatedIsOwnerBooking
 from django.contrib.auth import get_user_model
 from .serializers import BookingSerializer, ListingSerializer
 from drf_yasg.utils import swagger_auto_schema
 from .models import Booking, Listing
+from django_filters.rest_framework import DjangoFilterBackend
+from .pagination import StandardResultsSetPagination
 
 User = get_user_model()  # Custom user model
 
@@ -12,6 +14,12 @@ User = get_user_model()  # Custom user model
 class BookingViewSet(viewsets.ModelViewSet):
     serializer_class = BookingSerializer
     permission_classes = [IsAuthenticatedIsOwnerBooking]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["property", "start_date", "end_date", "total_price", "status", "created_at"]
+    search_fields = ["property", "start_date", "end_date", "total_price", "status", "created_at"]
+    ordering_fields = ["property", "start_date", "end_date", "total_price", "status", "created_at"]
+    odering = ["property"]
 
     def get_queryset(self):
         return Booking.objects.filter(user=self.request.user)
@@ -66,6 +74,12 @@ class ListingViewSet(viewsets.ModelViewSet):
     queryset = Listing.objects.all()
     serializer_class = ListingSerializer
     permission_classes = [IsAuthenticatedIsOwnerOrReadOnlyListing]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["name", "description", "location", "pricepernight", "created_at"]
+    search_fields =  ["name", "description", "location", "pricepernight", "created_at"]
+    ordering_fields =  ["name", "description", "location", "pricepernight", "created_at"]
+    odering = ["name"]
 
     def perform_create(self, serializer):
         serializer.save(host=self.request.user)
