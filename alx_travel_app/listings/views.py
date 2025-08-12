@@ -2,11 +2,18 @@ from rest_framework import filters, status, viewsets
 from rest_framework.response import Response
 from .permissions import IsAuthenticatedIsOwnerOrReadOnlyListing, IsAuthenticatedIsOwnerBooking
 from django.contrib.auth import get_user_model
-from .serializers import BookingSerializer, ListingSerializer
+from .serializers import BookingSerializer, ListingSerializer, PaymentSerializ
 from drf_yasg.utils import swagger_auto_schema
 from .models import Booking, Listing
 from django_filters.rest_framework import DjangoFilterBackend
 from .pagination import StandardResultsSetPagination
+import uuid, requests, os
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from .models import Payment, Booking
+from .serializers import PaymentSerializer
+
+CHAPA_SECRET_KEY = os.environ.get('CHAPA_SECRET_KEY')
 
 User = get_user_model()  # Custom user model
 
@@ -125,3 +132,80 @@ class ListingViewSet(viewsets.ModelViewSet):
     )
     def destroy(self, request, *args, **kwargs):
         return super().destroy(request, *args, **kwargs)
+
+class PaymentViewSet(viewsets.ModelViewSet):
+    queryset = Payment.objects.all()
+    serializer_class = PaymentSerializer
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=True, methods=['post'], url_path='initiate')
+    def initiate_payment(self, request, pk=None):
+        try:
+            booking = Booking.objects.get(pk=pk, user=request.user)
+        except Booking.DoesNotExist:
+            return Response({'error': 'Booking not found or not yours'}, status=status.HTTP_404_NOT_FOUND)
+
+        tx_ref = f"{uuid.uuid4()}"
+        payment = Payment.objects.create(
+            booking=booking,
+            amount=booking.total_price,
+            tx_ref=tx_ref
+        )
+
+        payload = {
+            "amount": str(payment.amount),
+            "currency": "ETB",
+            "email": request.user.email,
+            "first_name": request.user.first_name,
+            "last_name": request.user.last_name,
+            "tx_ref": tx_ref,
+            "callback_url": "https://yourdomain.com/api/payments/callback/",
+            "return_url": "https://yourdomain.com/payment-success/",
+            "customization": {
+                "title": "Booking Payment",
+                "description": f"Payment for booking {booking.booking_id}"
+            }
+        }
+
+        headers = {
+            "Authorization": f"Bearer {CHAPA_SECRET_KEY}",
+            "Content-Type": "application/json"
+        }
+
+        chapa_response = requests.post(
+            "https://api.chapa.co/v1/transaction/initialize",
+            json=payload,
+            headers=headers
+        )
+
+        data = chapa_response.json()
+        if chapa_response.status_code == 200 and data.get('status') == 'success':
+            return Response({
+                "checkout_url": data['data']['checkout_url'],
+                "tx_ref": tx_ref
+            })
+        else:
+            return Response(data, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['get'], url_path='verify/(?P<tx_ref>[^/.]+)')
+    def verify_payment(self, request, tx_ref=None):
+        try:
+            payment = Payment.objects.get(tx_ref=tx_ref, booking__user=request.user)
+        except Payment.DoesNotExist:
+            return Response({'error': 'Payment not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        headers = {"Authorization": f"Bearer {CHAPA_SECRET_KEY}"}
+        response = requests.get(
+            f"https://api.chapa.co/v1/transaction/verify/{tx_ref}",
+            headers=headers
+        )
+
+        data = response.json()
+        if data.get('status') == 'success':
+            chapa_status = data['data']['status']
+            payment.status = 'completed' if chapa_status == 'success' else 'failed'
+            payment.chapa_transaction_id = data['data']['reference']
+            payment.save()
+            return Response({"status": payment.status, "chapa_response": data})
+        else:
+            return Response(data, status=status.HTTP_400_BAD_REQUEST)

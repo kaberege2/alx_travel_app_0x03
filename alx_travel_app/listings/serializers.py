@@ -37,3 +37,9 @@ class ListingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Listing
         fields = '__all__'
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = '__all__'
+        read_only_fields = ('status', 'tx_ref', 'chapa_transaction_id')
