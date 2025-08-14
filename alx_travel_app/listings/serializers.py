@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Listing, Booking
+from .models import Listing, Booking, Payment
 from django.contrib.auth import get_user_model
 from datetime import date
 
@@ -17,13 +17,13 @@ class BookingSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def validate(self, data):
-        if data.start_date < date.today():
+        if data['start_date'] < date.today():
             raise serializers.ValidationError("Start date cannot be in the past!")
 
-        if data.end_date < data.today():
+        if data['end_date'] < date.today():
             raise serializers.ValidationError("End date cannot be in the past!")
 
-        if data.end_date < data.start_date:
+        if data['end_date'] < data['start_date']:
             raise serializers.ValidationError("End date cannot be less than start date!")
 
         return data

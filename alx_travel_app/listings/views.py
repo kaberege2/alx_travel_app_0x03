@@ -1,8 +1,9 @@
+from django.shortcuts import get_object_or_404
 from rest_framework import filters, status, viewsets
 from rest_framework.response import Response
 from .permissions import IsAuthenticatedIsOwnerOrReadOnlyListing, IsAuthenticatedIsOwnerBooking
 from django.contrib.auth import get_user_model
-from .serializers import BookingSerializer, ListingSerializer, PaymentSerializ
+from .serializers import BookingSerializer, ListingSerializer, PaymentSerializer
 from drf_yasg.utils import swagger_auto_schema
 from .models import Booking, Listing
 from django_filters.rest_framework import DjangoFilterBackend
@@ -12,6 +13,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from .models import Payment, Booking
 from .serializers import PaymentSerializer
+from .tasks import send_payment_confirmation_email
 
 CHAPA_SECRET_KEY = os.environ.get('CHAPA_SECRET_KEY')
 
@@ -145,7 +147,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
         except Booking.DoesNotExist:
             return Response({'error': 'Booking not found or not yours'}, status=status.HTTP_404_NOT_FOUND)
 
-        tx_ref = f"{uuid.uuid4()}"
+        tx_ref = f"booking-{uuid.uuid4()}"
         payment = Payment.objects.create(
             booking=booking,
             amount=booking.total_price,
@@ -154,16 +156,16 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
         payload = {
             "amount": str(payment.amount),
-            "currency": "ETB",
+            "currency": "USD",
             "email": request.user.email,
             "first_name": request.user.first_name,
             "last_name": request.user.last_name,
             "tx_ref": tx_ref,
-            "callback_url": "https://yourdomain.com/api/payments/callback/",
-            "return_url": "https://yourdomain.com/payment-success/",
+            "callback_url": request.build_absolute_uri("/api/payments/callback/"),
+            "return_url": "http://localhost:3000/payment-success/",
             "customization": {
                 "title": "Booking Payment",
-                "description": f"Payment for booking {booking.booking_id}"
+                "description": f"Payment for booking"
             }
         }
 
@@ -187,6 +189,26 @@ class PaymentViewSet(viewsets.ModelViewSet):
         else:
             return Response(data, status=status.HTTP_400_BAD_REQUEST)
     
+    @action(detail=False, methods=["get"])
+    def callback(self, request):
+        """
+        Chapa will call this URL after payment.
+        Query params: trx_ref, ref_id, status
+        """
+        trx_ref = request.GET.get("trx_ref")
+        ref_id = request.GET.get("ref_id")
+        chapa_status = request.GET.get("status")
+
+        if not trx_ref:
+            return Response({"error": "trx_ref is missing"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if chapa_status == "success":
+            payment = get_object_or_404(Payment, tx_ref=trx_ref)
+            payment.chapa_transaction_id = ref_id 
+            payment.save()
+
+        return Response({"message": "Callback processed"})
+    
     @action(detail=False, methods=['get'], url_path='verify/(?P<tx_ref>[^/.]+)')
     def verify_payment(self, request, tx_ref=None):
         try:
@@ -204,8 +226,15 @@ class PaymentViewSet(viewsets.ModelViewSet):
         if data.get('status') == 'success':
             chapa_status = data['data']['status']
             payment.status = 'completed' if chapa_status == 'success' else 'failed'
-            payment.chapa_transaction_id = data['data']['reference']
             payment.save()
+
+            # Send confirmation email asynchronously if payment succeeded
+            if payment.status == 'completed':
+                send_payment_confirmation_email.delay(
+                    request.user.email,
+                    str(payment.booking.booking_id),
+                )
+
             return Response({"status": payment.status, "chapa_response": data})
         else:
             return Response(data, status=status.HTTP_400_BAD_REQUEST)
