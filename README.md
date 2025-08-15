@@ -1,8 +1,8 @@
-# 🧭 ALX Travel App - Milestone 3: Listings, Bookings & Payments API
+# ALX Travel App - Milestone 4: Listings, Bookings & Payments API
 
 This milestone extends the Travel App with **payment initiation** for bookings and **automated confirmation emails** using Celery.
 
-## 🚀 Project Overview
+## Project Overview
 
 In this stage, we:
 
@@ -14,7 +14,7 @@ In this stage, we:
 
 ---
 
-## 🧱 Tech Stack
+## Tech Stack
 
 - Python 3.x
 - Django 5.2.3
@@ -26,7 +26,7 @@ In this stage, we:
 
 ---
 
-## 🧑‍💻 Custom User Model
+## Custom User Model
 
 We use a custom user model with roles:
 
@@ -38,9 +38,9 @@ Users authenticate via email and have UUID primary keys.
 
 ---
 
-## 🏠 Models Summary
+## Models Summary
 
-### 📍 Listing
+### Listing
 
 | Field         | Type      | Description            |
 | ------------- | --------- | ---------------------- |
@@ -53,7 +53,7 @@ Users authenticate via email and have UUID primary keys.
 | created_at    | DateTime  | Auto timestamp         |
 | updated_at    | DateTime  | Auto updated timestamp |
 
-### 📆 Booking
+### Booking
 
 | Field       | Type        | Description                    |
 | ----------- | ----------- | ------------------------------ |
@@ -68,11 +68,11 @@ Users authenticate via email and have UUID primary keys.
 
 ---
 
-## 🧩 API Endpoints
+## API Endpoints
 
 Base URL: `/api/`
 
-### ✅ Listings Endpoints
+### Listings Endpoints
 
 | Method | Endpoint          | Description                 |
 | ------ | ----------------- | --------------------------- |
@@ -82,7 +82,7 @@ Base URL: `/api/`
 | PUT    | `/listings/{id}/` | Update listing              |
 | DELETE | `/listings/{id}/` | Delete listing              |
 
-### ✅ Bookings Endpoints
+### Bookings Endpoints
 
 | Method | Endpoint                   | Description                  |
 | ------ | -------------------------- | ---------------------------- |
@@ -95,7 +95,7 @@ Base URL: `/api/`
 
 ---
 
-## 💳 Payment & Email Flow
+## Payment & Email Flow
 
 1. **Initiate Payment**
 
@@ -114,7 +114,7 @@ Base URL: `/api/`
 
 ---
 
-## 📑 API Documentation
+## API Documentation
 
 Visit:
 🔗 [`/swagger/`](http://localhost:8000/swagger/) — Swagger UI
@@ -122,7 +122,7 @@ Visit:
 
 ---
 
-## 🔌 How to Run
+## How to Run
 
 1. Clone the repository:
 
@@ -172,7 +172,7 @@ Visit:
 
 ---
 
-## 🧪 Testing the API
+## Testing the API
 
 Use **Postman**, **Insomnia**, or **Swagger UI** to:
 
@@ -182,7 +182,7 @@ Use **Postman**, **Insomnia**, or **Swagger UI** to:
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 alx_travel_app/
