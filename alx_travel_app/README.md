@@ -1,14 +1,15 @@
-# 🧭 ALX Travel App - Milestone 3: Listings and Bookings API
+# 🧭 ALX Travel App - Milestone 3: Listings, Bookings & Payments API
 
-This milestone focuses on building API endpoints for managing **Listings** and **Bookings** using Django REST Framework (DRF), with Swagger documentation support for testing and exploration.
+This milestone extends the Travel App with **payment initiation** for bookings and **automated confirmation emails** using Celery.
 
 ## 🚀 Project Overview
 
-This is **Milestone 3** of the ALX Travel App series. In this stage, we:
+In this stage, we:
 
-- Created RESTful API endpoints for Listings and Bookings.
-- Used `ModelViewSet` from DRF to enable full CRUD support.
-- Registered all endpoints under `/api/` using a router.
+- Built CRUD API endpoints for **Listings** and **Bookings**.
+- Added **payment initiation endpoint** for bookings.
+- Integrated **Celery** to send booking confirmation emails asynchronously.
+- Used `ModelViewSet` for RESTful API endpoints.
 - Integrated Swagger (drf-yasg) for auto-generated API documentation.
 
 ---
@@ -21,12 +22,13 @@ This is **Milestone 3** of the ALX Travel App series. In this stage, we:
 - drf-yasg 1.21.10 (Swagger for API docs)
 - django-environ
 - PyMySQL
+- Celery + Redis (for background tasks)
 
 ---
 
 ## 🧑‍💻 Custom User Model
 
-We use a custom user model with the following roles:
+We use a custom user model with roles:
 
 - `guest`
 - `host`
@@ -82,35 +84,52 @@ Base URL: `/api/`
 
 ### ✅ Bookings Endpoints
 
-| Method | Endpoint          | Description        |
-| ------ | ----------------- | ------------------ |
-| GET    | `/bookings/`      | List all bookings  |
-| POST   | `/bookings/`      | Create new booking |
-| GET    | `/bookings/{id}/` | Retrieve a booking |
-| PUT    | `/bookings/{id}/` | Update booking     |
-| DELETE | `/bookings/{id}/` | Delete booking     |
+| Method | Endpoint                   | Description                  |
+| ------ | -------------------------- | ---------------------------- |
+| GET    | `/bookings/`               | List all bookings            |
+| POST   | `/bookings/`               | Create new booking           |
+| GET    | `/bookings/{id}/`          | Retrieve a booking           |
+| PUT    | `/bookings/{id}/`          | Update booking               |
+| DELETE | `/bookings/{id}/`          | Delete booking               |
+| POST   | `/bookings/{id}/initiate/` | Initiate payment for booking |
+
+---
+
+## 💳 Payment & Email Flow
+
+1. **Initiate Payment**
+
+   - Send a `POST` request to `/bookings/{id}/initiate/`.
+   - The system verifies booking details and prepares the payment process.
+
+2. **On Successful Payment**
+
+   - Booking status is updated to **confirmed**.
+   - A **confirmation email** is sent to the user asynchronously using **Celery**.
+
+3. **Email Sending**
+
+   - Celery worker sends the email in the background.
+   - Redis is used as the message broker.
 
 ---
 
 ## 📑 API Documentation
 
-Visit:  
-🔗 [`/swagger/`](http://localhost:8000/swagger/) — Swagger UI  
+Visit:
+🔗 [`/swagger/`](http://localhost:8000/swagger/) — Swagger UI
 🔗 [`/redoc/`](http://localhost:8000/redoc/) — ReDoc UI
-
-Auto-generated using **drf-yasg**.
 
 ---
 
 ## 🔌 How to Run
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/kaberege2/alx_travel_app_0x01.git
    cd alx_travel_app
    ```
-
-````
 
 2. Install dependencies:
 
@@ -118,7 +137,14 @@ Auto-generated using **drf-yasg**.
    pip install -r requirements.txt
    ```
 
-3. Set up `.env` file using `django-environ`.
+3. Set up `.env` file:
+
+   ```env
+   DEBUG=True
+   SECRET_KEY=your_secret_key
+   DATABASE_URL=mysql://user:password@localhost:3306/travelapp
+   CELERY_BROKER_URL=redis://localhost:6379/0
+   ```
 
 4. Run migrations:
 
@@ -126,7 +152,19 @@ Auto-generated using **drf-yasg**.
    python manage.py migrate
    ```
 
-5. Start development server:
+5. Start Redis (in another terminal):
+
+   ```bash
+   redis-server
+   ```
+
+6. Start Celery worker:
+
+   ```bash
+   celery -A alx_travel_app worker --loglevel=info
+   ```
+
+7. Start development server:
 
    ```bash
    python manage.py runserver
@@ -136,11 +174,11 @@ Auto-generated using **drf-yasg**.
 
 ## 🧪 Testing the API
 
-Use **Postman**, **Insomnia**, or **Swagger UI** to test:
+Use **Postman**, **Insomnia**, or **Swagger UI** to:
 
-* Create listings and bookings
-* Retrieve, update, delete them
-* Confirm status updates (confirmed, canceled, etc.)
+- Create listings and bookings
+- Initiate a payment for a booking
+- Receive booking confirmation emails
 
 ---
 
@@ -148,6 +186,12 @@ Use **Postman**, **Insomnia**, or **Swagger UI** to test:
 
 ```
 alx_travel_app/
+├── bookings/
+│   ├── models.py
+│   ├── views.py
+│   ├── tasks.py
+│   ├── urls.py
+│   └── serializers.py
 ├── listings/
 │   ├── models.py
 │   ├── views.py
@@ -159,5 +203,3 @@ alx_travel_app/
 ├── settings.py
 └── README.md
 ```
-
-````

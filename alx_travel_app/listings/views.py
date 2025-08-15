@@ -4,7 +4,6 @@ from rest_framework.response import Response
 from .permissions import IsAuthenticatedIsOwnerOrReadOnlyListing, IsAuthenticatedIsOwnerBooking
 from django.contrib.auth import get_user_model
 from .serializers import BookingSerializer, ListingSerializer, PaymentSerializer
-from drf_yasg.utils import swagger_auto_schema
 from .models import Booking, Listing
 from django_filters.rest_framework import DjangoFilterBackend
 from .pagination import StandardResultsSetPagination
@@ -14,6 +13,8 @@ from rest_framework.permissions import IsAuthenticated
 from .models import Payment, Booking
 from .serializers import PaymentSerializer
 from .tasks import send_payment_confirmation_email
+from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi
 
 CHAPA_SECRET_KEY = os.environ.get('CHAPA_SECRET_KEY')
 
@@ -31,6 +32,10 @@ class BookingViewSet(viewsets.ModelViewSet):
     odering = ["property"]
 
     def get_queryset(self):
+        # Short-circuit for Swagger schema generation
+        if getattr(self, 'swagger_fake_view', False):
+            return Booking.objects.none()
+            
         return Booking.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
@@ -140,8 +145,32 @@ class PaymentViewSet(viewsets.ModelViewSet):
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
 
+    @swagger_auto_schema(
+        operation_summary="Initiate a payment",
+        operation_description="Initialize a payment for a specific booking. Returns a checkout URL and tx_ref.",
+        responses={
+            200: openapi.Response(
+                description="Payment initialized successfully",
+                examples={
+                    "application/json": {
+                        "checkout_url": "https://checkout.chapa.co/...",
+                        "tx_ref": "booking-xxxx"
+                    }
+                }
+            ),
+            404: "Booking not found or not yours",
+            400: "Failed to initialize payment"
+        }
+    )
     @action(detail=True, methods=['post'], url_path='initiate')
     def initiate_payment(self, request, pk=None):
+        # Skip user filtering for Swagger schema generation
+        if getattr(self, 'swagger_fake_view', False):
+            return Response({
+                "checkout_url": "https://checkout.chapa.co/...",
+                "tx_ref": "booking-xxxx"
+            })
+
         try:
             booking = Booking.objects.get(pk=pk, user=request.user)
         except Booking.DoesNotExist:
@@ -162,7 +191,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
             "last_name": request.user.last_name,
             "tx_ref": tx_ref,
             "callback_url": request.build_absolute_uri("/api/payments/callback/"),
-            "return_url": "http://localhost:3000/payment-success/",
+            "return_url": "https://kaberege-portfolio.vercel.app/",
             "customization": {
                 "title": "Booking Payment",
                 "description": f"Payment for booking"
@@ -189,7 +218,17 @@ class PaymentViewSet(viewsets.ModelViewSet):
         else:
             return Response(data, status=status.HTTP_400_BAD_REQUEST)
     
-    @action(detail=False, methods=["get"])
+    @swagger_auto_schema(
+        operation_summary="Payment callback",
+        operation_description="Endpoint called by Chapa after payment. Updates payment record status.",
+        manual_parameters=[
+            openapi.Parameter("trx_ref", openapi.IN_QUERY, description="Transaction reference", type=openapi.TYPE_STRING),
+            openapi.Parameter("ref_id", openapi.IN_QUERY, description="Chapa transaction ID", type=openapi.TYPE_STRING),
+            openapi.Parameter("status", openapi.IN_QUERY, description="Payment status", type=openapi.TYPE_STRING),
+        ],
+        responses={200: "Callback processed", 400: "trx_ref is missing"}
+    )
+    @action(detail=False, methods=["get"], url_path='callback')
     def callback(self, request):
         """
         Chapa will call this URL after payment.
@@ -209,8 +248,32 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
         return Response({"message": "Callback processed"})
     
+    @swagger_auto_schema(
+        operation_summary="Verify payment",
+        operation_description="Verify the status of a payment by tx_ref. Returns payment status and Chapa response.",
+        manual_parameters=[
+            openapi.Parameter("tx_ref", openapi.IN_PATH, description="Transaction reference to verify", type=openapi.TYPE_STRING)
+        ],
+        responses={
+            200: openapi.Response(
+                description="Payment verification result",
+                examples={
+                    "application/json": {
+                        "status": "completed",
+                        "chapa_response": {"status": "success", "data": {}}
+                    }
+                }
+            ),
+            404: "Payment not found",
+            400: "Verification failed"
+        }
+    )
     @action(detail=False, methods=['get'], url_path='verify/(?P<tx_ref>[^/.]+)')
     def verify_payment(self, request, tx_ref=None):
+        # Skip user filtering for Swagger schema generation
+        if getattr(self, 'swagger_fake_view', False):
+            return Response({"status": "completed", "chapa_response": {"status": "success", "data": {}}})
+
         try:
             payment = Payment.objects.get(tx_ref=tx_ref, booking__user=request.user)
         except Payment.DoesNotExist:
@@ -228,7 +291,6 @@ class PaymentViewSet(viewsets.ModelViewSet):
             payment.status = 'completed' if chapa_status == 'success' else 'failed'
             payment.save()
 
-            # Send confirmation email asynchronously if payment succeeded
             if payment.status == 'completed':
                 send_payment_confirmation_email.delay(
                     request.user.email,
