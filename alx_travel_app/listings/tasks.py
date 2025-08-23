@@ -10,7 +10,6 @@ def send_payment_confirmation_email(user_email, payment_id):
     """
     try:
         payment = Payment.objects.get(payment_id=payment_id)
-        print(payment)
     except Payment.DoesNotExist:
         return f"Payment with ID {payment_id} not found"
 
@@ -21,7 +20,7 @@ def send_payment_confirmation_email(user_email, payment_id):
         f"Amount Paid: {payment.amount} USD'\n"
         f"Transaction Reference: {payment.tx_ref}\n"
         f"Chapa Transaction ID: {payment.chapa_transaction_id}\n\n"
-        "Thank you for your payment!\n"
+        "Thank you for your payment!\n\n"
         "Best regards,\n"
         "Your Booking Team"
     )
