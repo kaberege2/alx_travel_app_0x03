@@ -12,7 +12,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from .models import Payment, Booking
 from .serializers import PaymentSerializer
-from .tasks import send_payment_confirmation_email
+from .tasks import send_payment_confirmation_email, send_booking_confirmation_email
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
@@ -29,7 +29,7 @@ class BookingViewSet(viewsets.ModelViewSet):
     filterset_fields = ["property", "start_date", "end_date", "total_price", "status", "created_at"]
     search_fields = ["property", "start_date", "end_date", "total_price", "status", "created_at"]
     ordering_fields = ["property", "start_date", "end_date", "total_price", "status", "created_at"]
-    odering = ["property"]
+    ordering = ["property"]
 
     def get_queryset(self):
         # Short-circuit for Swagger schema generation
@@ -39,7 +39,11 @@ class BookingViewSet(viewsets.ModelViewSet):
         return Booking.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        booking = serializer.save(user=self.request.user)
+        send_booking_confirmation_email.delay(
+            booking.user.email,
+            str(booking.booking_id)
+        )
 
     @swagger_auto_schema(
         operation_summary="List user's bookings",
@@ -93,7 +97,7 @@ class ListingViewSet(viewsets.ModelViewSet):
     filterset_fields = ["name", "description", "location", "pricepernight", "created_at"]
     search_fields =  ["name", "description", "location", "pricepernight", "created_at"]
     ordering_fields =  ["name", "description", "location", "pricepernight", "created_at"]
-    odering = ["name"]
+    ordering = ["name"]
 
     def perform_create(self, serializer):
         serializer.save(host=self.request.user)
@@ -167,14 +171,9 @@ class InitiatePaymentView(views.APIView):
             return Response({'error': 'Booking not found or not yours'}, status=status.HTTP_404_NOT_FOUND)
 
         tx_ref = f"booking-{uuid.uuid4()}"
-        payment = Payment.objects.create(
-            booking=booking,
-            amount=booking.total_price,
-            tx_ref=tx_ref
-        )
 
         payload = {
-            "amount": str(payment.amount),
+            "amount": str(booking.total_price,),
             "currency": "USD",
             "email": request.user.email,
             "first_name": request.user.first_name,
@@ -201,6 +200,12 @@ class InitiatePaymentView(views.APIView):
 
         data = chapa_response.json()
         if chapa_response.status_code == 200 and data.get('status') == 'success':
+            payment = Payment.objects.create(
+                booking=booking,
+                amount=booking.total_price,
+                tx_ref=tx_ref
+            )
+
             return Response({
                 "checkout_url": data['data']['checkout_url'],
                 "tx_ref": tx_ref

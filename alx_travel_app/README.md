@@ -1,205 +1,98 @@
-# ALX Travel App - Milestone 4: Listings, Bookings & Payments API
+# ALX Travel App - Milestone 5: Background Jobs for Email Notifications
 
-This milestone extends the Travel App with **payment initiation** for bookings and **automated confirmation emails** using Celery.
+This milestone enhances the `alx_travel_app` project by adding **asynchronous email notifications** using **Celery** with **RabbitMQ** as the message broker.
 
-## Project Overview
+The main feature added is sending **booking confirmation emails** in the background without blocking the main request-response cycle.
 
-In this stage, we:
+---
 
-- Built CRUD API endpoints for **Listings** and **Bookings**.
-- Added **payment initiation endpoint** for bookings.
-- Integrated **Celery** to send booking confirmation emails asynchronously.
-- Used `ModelViewSet` for RESTful API endpoints.
-- Integrated Swagger (drf-yasg) for auto-generated API documentation.
+## Objectives
+
+- Configure **Celery** with **RabbitMQ** as the message broker.
+- Implement **asynchronous email notifications** for bookings.
+- Ensure **non-blocking user experience** by offloading email sending to background tasks.
+- Gain hands-on experience with Django’s **email backend**.
 
 ---
 
 ## Tech Stack
 
-- Python 3.x
-- Django 5.2.3
-- Django REST Framework 3.16.0
-- drf-yasg 1.21.10 (Swagger for API docs)
-- django-environ
-- PyMySQL
-- Celery + Redis (for background tasks)
+- **Django** (backend framework)
+- **Django REST Framework** (API development)
+- **Celery** (task queue for background processing)
+- **RabbitMQ** (message broker)
+- **SMTP Email Backend** (for sending emails)
 
 ---
 
-## Custom User Model
+## Key Feature: Email Notifications
 
-We use a custom user model with roles:
-
-- `guest`
-- `host`
-- `admin`
-
-Users authenticate via email and have UUID primary keys.
+- When a **new booking is created**, a **Celery task** is triggered.
+- The task sends a **confirmation email** to the guest using Django’s email backend.
+- The email task runs asynchronously in the background via RabbitMQ.
 
 ---
 
-## Models Summary
+## Setup & Configuration
 
-### Listing
+### 1. Install Dependencies
 
-| Field         | Type      | Description            |
-| ------------- | --------- | ---------------------- |
-| property_id   | UUIDField | Unique property ID     |
-| host          | FK(User)  | Host of the listing    |
-| name          | CharField | Property name          |
-| description   | TextField | Description            |
-| location      | CharField | Location string        |
-| pricepernight | Decimal   | Cost per night         |
-| created_at    | DateTime  | Auto timestamp         |
-| updated_at    | DateTime  | Auto updated timestamp |
+```bash
+pip install -r requirements.txt
+```
 
-### Booking
+### 2. Environment Variables (`.env`)
 
-| Field       | Type        | Description                    |
-| ----------- | ----------- | ------------------------------ |
-| booking_id  | UUIDField   | Unique booking ID              |
-| property    | FK(Listing) | Property booked                |
-| user        | FK(User)    | Guest who made booking         |
-| start_date  | DateField   | Booking start date             |
-| end_date    | DateField   | Booking end date               |
-| total_price | Decimal     | Total cost                     |
-| status      | Choice      | pending / confirmed / canceled |
-| created_at  | DateTime    | Auto timestamp                 |
+```env
+DEBUG=True
+SECRET_KEY=your_secret_key
+DATABASE_URL=mysql://user:password@localhost:3306/travelapp
+CELERY_BROKER_URL=amqp://guest:guest@localhost:5672//
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your_email@example.com
+EMAIL_HOST_PASSWORD=your_email_password
+```
 
----
+### 3. Run Migrations
 
-## API Endpoints
+```bash
+python manage.py migrate
+```
 
-Base URL: `/api/`
+### 4. Start RabbitMQ
 
-### Listings Endpoints
+```bash
+sudo systemctl start rabbitmq-server
+```
 
-| Method | Endpoint          | Description                 |
-| ------ | ----------------- | --------------------------- |
-| GET    | `/listings/`      | List all listings           |
-| POST   | `/listings/`      | Create new listing          |
-| GET    | `/listings/{id}/` | Retrieve a specific listing |
-| PUT    | `/listings/{id}/` | Update listing              |
-| DELETE | `/listings/{id}/` | Delete listing              |
+### 5. Start Celery Worker
 
-### Bookings Endpoints
+```bash
+celery -A alx_travel_app worker --loglevel=info
+```
 
-| Method | Endpoint                   | Description                  |
-| ------ | -------------------------- | ---------------------------- |
-| GET    | `/bookings/`               | List all bookings            |
-| POST   | `/bookings/`               | Create new booking           |
-| GET    | `/bookings/{id}/`          | Retrieve a booking           |
-| PUT    | `/bookings/{id}/`          | Update booking               |
-| DELETE | `/bookings/{id}/`          | Delete booking               |
-| POST   | `/bookings/{id}/initiate/` | Initiate payment for booking |
+### 6. Run Django Server
+
+```bash
+python manage.py runserver
+```
 
 ---
 
-## Payment & Email Flow
+## Workflow
 
-1. **Initiate Payment**
-
-   - Send a `POST` request to `/bookings/{id}/initiate/`.
-   - The system verifies booking details and prepares the payment process.
-
-2. **On Successful Payment**
-
-   - Booking status is updated to **confirmed**.
-   - A **confirmation email** is sent to the user asynchronously using **Celery**.
-
-3. **Email Sending**
-
-   - Celery worker sends the email in the background.
-   - Redis is used as the message broker.
+1. **User creates a booking** via the API (`POST /bookings/`).
+2. **BookingViewSet** triggers the **Celery task** using `.delay()`.
+3. **Celery worker** picks up the task from RabbitMQ.
+4. **Email is sent** to the user confirming the booking.
+5. User receives a **non-blocking experience** — booking response is instant, email is handled in background.
 
 ---
 
 ## API Documentation
 
-Visit:
-🔗 [`/swagger/`](http://localhost:8000/swagger/) — Swagger UI
-🔗 [`/redoc/`](http://localhost:8000/redoc/) — ReDoc UI
-
----
-
-## How to Run
-
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/kaberege2/alx_travel_app_0x01.git
-   cd alx_travel_app
-   ```
-
-2. Install dependencies:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Set up `.env` file:
-
-   ```env
-   DEBUG=True
-   SECRET_KEY=your_secret_key
-   DATABASE_URL=mysql://user:password@localhost:3306/travelapp
-   CELERY_BROKER_URL=redis://localhost:6379/0
-   ```
-
-4. Run migrations:
-
-   ```bash
-   python manage.py migrate
-   ```
-
-5. Start Redis (in another terminal):
-
-   ```bash
-   redis-server
-   ```
-
-6. Start Celery worker:
-
-   ```bash
-   celery -A alx_travel_app worker --loglevel=info
-   ```
-
-7. Start development server:
-
-   ```bash
-   python manage.py runserver
-   ```
-
----
-
-## Testing the API
-
-Use **Postman**, **Insomnia**, or **Swagger UI** to:
-
-- Create listings and bookings
-- Initiate a payment for a booking
-- Receive booking confirmation emails
-
----
-
-## Project Structure
-
-```
-alx_travel_app/
-├── bookings/
-│   ├── models.py
-│   ├── views.py
-│   ├── tasks.py
-│   ├── urls.py
-│   └── serializers.py
-├── listings/
-│   ├── models.py
-│   ├── views.py
-│   ├── urls.py
-│   └── serializers.py
-├── users/
-│   ├── models.py
-│   └── managers.py
-├── settings.py
-└── README.md
-```
+- Swagger UI: [`/swagger/`](http://localhost:8000/swagger/)
+- ReDoc: [`/redoc/`](http://localhost:8000/redoc/)

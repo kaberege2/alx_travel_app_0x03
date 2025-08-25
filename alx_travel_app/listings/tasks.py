@@ -1,7 +1,7 @@
 from celery import shared_task
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import Payment
+from .models import Payment, Booking
 
 @shared_task
 def send_payment_confirmation_email(user_email, payment_id):
@@ -17,9 +17,9 @@ def send_payment_confirmation_email(user_email, payment_id):
     message = (
         f"Hello {payment.booking.user.first_name},\n\n"
         f"Your payment for booking {payment.booking.booking_id} has been successfully processed.\n"
-        f"Amount Paid: {payment.amount} USD'\n"
-        f"Transaction Reference: {payment.tx_ref}\n"
-        f"Chapa Transaction ID: {payment.chapa_transaction_id}\n\n"
+        f"Amount Paid: {payment.amount} USD.\n"
+        f"Transaction Reference: {payment.tx_ref}.\n"
+        f"Chapa Transaction ID: {payment.chapa_transaction_id}.\n\n"
         "Thank you for your payment!\n\n"
         "Best regards,\n"
         "Your Booking Team"
@@ -34,3 +34,20 @@ def send_payment_confirmation_email(user_email, payment_id):
     )
 
     return f"Confirmation email sent to {user_email}"
+
+@shared_task
+def send_booking_confirmation_email(user_email, booking_id):
+    subject = "Booking Confirmation"
+    message = f"Your booking with ID {booking_id} has been successfully created!"
+    from_email = settings.DEFAULT_FROM_EMAIL
+    recipient_list = [user_email]
+    
+    send_mail(
+        subject, 
+        message, 
+        from_email, 
+        recipient_list, 
+        fail_silently=False
+    )
+
+    return f"Confirmation email sent to {user_email} for booking {booking_id}"
