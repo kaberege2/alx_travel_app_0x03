@@ -173,7 +173,7 @@ class InitiatePaymentView(views.APIView):
         tx_ref = f"booking-{uuid.uuid4()}"
 
         payload = {
-            "amount": str(booking.total_price,),
+            "amount": str(booking.total_price),
             "currency": "USD",
             "email": request.user.email,
             "first_name": request.user.first_name,
@@ -192,24 +192,30 @@ class InitiatePaymentView(views.APIView):
             "Content-Type": "application/json"
         }
 
-        chapa_response = requests.post(
-            "https://api.chapa.co/v1/transaction/initialize",
-            json=payload,
-            headers=headers
-        )
-
-        data = chapa_response.json()
-        if chapa_response.status_code == 200 and data.get('status') == 'success':
-            payment = Payment.objects.create(
-                booking=booking,
-                amount=booking.total_price,
-                tx_ref=tx_ref
+        try:
+            chapa_response = requests.post(
+                "https://api.chapa.co/v1/transaction/initialize",
+                json=payload, 
+                headers=headers
             )
+            data = chapa_response.json()
+        except Exception as e:
+            return Response({"error": f"Payment failed: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response({
-                "checkout_url": data['data']['checkout_url'],
-                "tx_ref": tx_ref
-            })
+        if chapa_response.status_code == 200 and data.get('status') == 'success':
+            try:
+                payment = Payment.objects.create(
+                    booking=booking,
+                    amount=booking.total_price,
+                    tx_ref=tx_ref
+                )
+                
+                return Response({
+                    "checkout_url": data['data']['checkout_url'],
+                    "tx_ref": tx_ref
+                })
+            except Exception as e:
+                return Response({"error": f"Failed to record payment in system: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         else:
             return Response(data, status=status.HTTP_400_BAD_REQUEST)
     
@@ -251,12 +257,14 @@ class VerifyPaymentView(views.APIView):
             return Response({'error': 'Payment not found'}, status=status.HTTP_404_NOT_FOUND)
 
         headers = {"Authorization": f"Bearer {CHAPA_SECRET_KEY}"}
-        response = requests.get(
-            f"https://api.chapa.co/v1/transaction/verify/{tx_ref}",
-            headers=headers
-        )
-
-        data = response.json()
+        try:
+            response = requests.get(
+                f"https://api.chapa.co/v1/transaction/verify/{tx_ref}",
+                headers=headers
+            ) 
+            data = response.json()
+        except Exception as e:
+            return Response({"error": f"Failed to verify payment in system: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if data.get('status') == 'success':
             chapa_status = data['data']['status']
